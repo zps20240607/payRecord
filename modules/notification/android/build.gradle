@@ -1,0 +1,27 @@
+buildscript {
+  repositories {
+    google()
+    mavenCentral()
+  }
+  dependencies {
+    classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:2.1.20")
+  }
+}
+
+apply plugin: 'com.android.library'
+apply plugin: 'kotlin-android'
+
+android {
+  namespace "com.payrecord.app.notification"
+  compileSdk 36
+  defaultConfig { minSdk 24 }
+}
+
+repositories {
+  mavenCentral()
+}
+
+dependencies {
+  implementation "org.jetbrains.kotlin:kotlin-stdlib:2.1.20"
+  implementation project(':expo-modules-core')
+}

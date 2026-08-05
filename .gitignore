@@ -31,6 +31,8 @@ yarn-error.*
 *.pem
 
 # local env files
+.env
+.env.local
 .env*.local
 
 # typescript
@@ -39,3 +41,14 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+android/app/release.jks
+*.jks
+*.keystore
+# 临时/调试文件
+temp_files/
+unfixed.jpg
+
+# 原生模块构建产物
+modules/notification/android/build/
+modules/notification/android/.gradle/

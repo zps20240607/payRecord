@@ -1,0 +1,7 @@
+{
+  "platforms": ["android"],
+  "ios": {},
+  "android": {
+    "modules": ["com.payrecord.app.notification.PayRecordNotificationModule"]
+  }
+}
