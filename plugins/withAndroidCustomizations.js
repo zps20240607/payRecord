@@ -39,6 +39,12 @@ module.exports = function withAndroidCustomizations(config) {
   // 2. Inject release signing config from .env.local
   config = withAppBuildGradle(config, (config) => {
     if (config.modResults.language === 'groovy') {
+      let contents = config.modResults.contents;
+
+      // 纯 release 发布：不区分 debug/.dev 包，两个构建类型共用同一 applicationId。
+      // 幂等移除旧版本插件注入的 .dev 后缀（放在签名守卫之前，任何时候 prebuild 都生效）
+      contents = contents.replace(/\n\s*applicationIdSuffix\s+["']\.dev["']/g, '');
+
       // Groovy 单引号字符串转义，防止密码含 \ 或 ' 破坏构建脚本
       const esc = (s) => s.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
       const keystorePassword = esc(process.env.KEYSTORE_PASSWORD || '');
@@ -47,6 +53,7 @@ module.exports = function withAndroidCustomizations(config) {
 
       if (!keystorePassword) {
         console.log('[withAndroidCustomizations] No KEYSTORE_PASSWORD env, skipping signing config injection.');
+        config.modResults.contents = contents;
         return config;
       }
 
@@ -66,8 +73,6 @@ module.exports = function withAndroidCustomizations(config) {
         }
     }`;
 
-      let contents = config.modResults.contents;
-
       // Replace existing signingConfigs block
       contents = contents.replace(
         /signingConfigs\s*\{[^}]*(?:\{[^}]*\}[^}]*)*\}/s,
@@ -80,14 +85,6 @@ module.exports = function withAndroidCustomizations(config) {
         /(release\s*\{[^}]*?)signingConfig\s+signingConfigs\.\w+/,
         '$1signingConfig signingConfigs.release'
       );
-
-      // debug 包加 .dev 后缀，与 release 共存（幂等）
-      if (!contents.includes('applicationIdSuffix ".dev"')) {
-        contents = contents.replace(
-          /(debug\s*\{\s*\n\s*signingConfig\s+signingConfigs\.debug)/,
-          '$1\n            applicationIdSuffix ".dev"'
-        );
-      }
 
       config.modResults.contents = contents;
     }

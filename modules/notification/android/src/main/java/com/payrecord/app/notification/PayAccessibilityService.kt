@@ -19,6 +19,7 @@ class PayAccessibilityService : AccessibilityService() {
     private val chatMarkers = listOf("转账给", "已转账", "微信转账", "发出红包")
     private val receiptMarkers = listOf("支付金额", "转账金额", "红包金额")
     private val transferWaitKeywords = listOf("等待对方确认", "等待对方领取", "等待确认收款")
+    private val expiredRefundKeywords = listOf("已过期", "过期退款", "过期退回", "已退还", "过期未领取")
     private val amountRegex = Regex("""[¥￥]\s*(\d+(?:\.\d+)?)""")
     private val amountYuanRegex = Regex("""(\d+(?:\.\d{1,2})?)\s*元""")
     private const val DEDUP_WINDOW_MS = 60_000L
@@ -42,12 +43,16 @@ class PayAccessibilityService : AccessibilityService() {
     DedupManager.init(this)
     DedupManager.cleanExpiredRecords()
     KeepAliveService.ensureRunning(this)
+    Watchdog.schedule(this)
     Log.d(TAG, "PayAccessibilityService connected")
   }
 
   override fun onDestroy() {
     isRunning = false
     super.onDestroy()
+    // 无障碍被系统解绑（划掉 App/进程被杀）时，安排看门狗快速恢复
+    Watchdog.schedule(this, Watchdog.QUICK_RECOVERY_MS)
+    Log.d(TAG, "PayAccessibilityService destroyed")
   }
 
   override fun onAccessibilityEvent(event: AccessibilityEvent?) {
@@ -92,10 +97,15 @@ class PayAccessibilityService : AccessibilityService() {
 
       // ---- 红包领取检测 ----
       // 看到 LuckyMoneyNewDetailUI（红包详情页）就标记，返回时弹窗
-      // 不限时间，已领取的再打开也弹
+      // 不限时间，已领取的再打开也弹；过期/退款详情页跳过，避免误弹
       if (cls.contains("LuckyMoneyNewDetailUI")) {
-        sawLuckyMoneyNewUIAt = now
-        Log.d(TAG, "[RP] LuckyMoneyNewDetailUI, will prompt on return")
+        if (texts.any { t -> expiredRefundKeywords.any { t.contains(it) } }) {
+          sawLuckyMoneyNewUIAt = 0
+          Log.d(TAG, "[RP] Expired/refund red packet detail, skip prompting")
+        } else {
+          sawLuckyMoneyNewUIAt = now
+          Log.d(TAG, "[RP] LuckyMoneyNewDetailUI, will prompt on return")
+        }
       }
       // 返回聊天/主界面 → 弹悬浮窗
       if ((cls.contains("ChattingMainUI") || cls.contains("LauncherUI")) && sawLuckyMoneyNewUIAt > 0 && sawPasswordPageAt == 0L && now - sawLuckyMoneyNewUIAt < 60_000) {
@@ -109,10 +119,15 @@ class PayAccessibilityService : AccessibilityService() {
 
       // ---- 收款检测 ----
       // 看到 RemittanceDetailUI（转账详情页）就标记，返回时弹窗
-      // 不限时间，已收的再打开也弹
+      // 不限时间，已收的再打开也弹；过期/退款详情页跳过，避免误弹
       if (cls.contains("RemittanceDetailUI")) {
-        sawRemittanceAt = now
-        Log.d(TAG, "[RM] RemittanceDetailUI, will prompt on return")
+        if (texts.any { t -> expiredRefundKeywords.any { t.contains(it) } }) {
+          sawRemittanceAt = 0
+          Log.d(TAG, "[RM] Expired/refund remittance detail, skip prompting")
+        } else {
+          sawRemittanceAt = now
+          Log.d(TAG, "[RM] RemittanceDetailUI, will prompt on return")
+        }
       }
       // 返回聊天/主界面 → 弹悬浮窗
       if ((cls.contains("ChattingMainUI") || cls.contains("LauncherUI")) && sawRemittanceAt > 0 && sawPasswordPageAt == 0L && now - sawRemittanceAt < 60_000) {
@@ -125,6 +140,9 @@ class PayAccessibilityService : AccessibilityService() {
       }
 
       // ---- 直接文本识别 ----
+      // 红包/转账过期退款的页面（或返回聊天后带有过期退款气泡）不弹任何速记
+      if (texts.any { t -> expiredRefundKeywords.any { t.contains(it) } }) return
+
       val isSuccessPage = texts.any { t -> successKeywords.any { t.contains(it) } }
       val isChatBubble = texts.any { t -> chatMarkers.any { t.contains(it) } }
       val isReceipt = texts.any { t -> receiptMarkers.any { t.contains(it) } }

@@ -43,18 +43,21 @@ class NotificationListener : NotificationListenerService() {
     super.onCreate()
     isRunning = true
     KeepAliveService.ensureRunning(this)
+    Watchdog.schedule(this)
     Log.d(TAG, "NotificationListener started")
   }
 
   override fun onDestroy() {
     isRunning = false
     super.onDestroy()
+    // 被系统回收时尽快安排一轮自愈检查，避免要等用户手动打开 App
+    Watchdog.schedule(this, Watchdog.QUICK_RECOVERY_MS)
     Log.d(TAG, "NotificationListener stopped")
   }
 
   override fun onNotificationPosted(sbn: StatusBarNotification) {
-    val packageName = sbn.packageName
-    if (packageName !in monitoredPackages) return
+    val sourcePackage = sbn.packageName
+    if (sourcePackage !in monitoredPackages) return
 
     val extras = sbn.notification.extras
     val title = extras.getCharSequence("android.title")?.toString() ?: ""
@@ -82,32 +85,31 @@ class NotificationListener : NotificationListenerService() {
     if (!paymentKeywords.any { content.contains(it) }) return
     if (ignoreKeywords.any { content.contains(it) }) return
 
-    // 提前解析金额（红包/转账兜底逻辑需要）
-    val parsedAmount = parseAmountFromText(text)
+    // 微信的红包/转账通知（含过期退款）统一交给无障碍服务处理：
+    // 未领取/未确认之前通知里没有金额，这里弹窗既拿不到金额，
+    // 又会在无障碍「红包/转账详情页 → 返回聊天」时重复弹一次。
+    val wechatExpiredRefund = content.contains("过期") &&
+      (content.contains("退款") || content.contains("退回") || content.contains("退还"))
+    if (sourcePackage == "com.tencent.mm" &&
+      (content.contains("红包") || content.contains("转账") || wechatExpiredRefund)
+    ) {
+      Log.d(TAG, "WeChat red packet/transfer (or expired refund) handled by accessibility, ignore notification: $content")
+      return
+    }
 
-    // 红包通知：微信收到红包通知时金额可能为空（"收到红包"），仍然弹窗让用户填写
-    // 无障碍服务在华为等手机上容易被杀，通知监听层也要兜底
-    if (content.contains("红包") && packageName == "com.tencent.mm") {
-      if (parsedAmount != null) {
-        Log.d(TAG, "WeChat red packet with amount: ¥$parsedAmount")
-      } else {
-        Log.d(TAG, "WeChat red packet (amount unknown), prompting entry: $content")
+    // 其他 App 的"红包"：营销类直接屏蔽；拿不到金额的也屏蔽，避免误弹悬浮窗
+    if (content.contains("红包")) {
+      if (sourcePackage in redPacketIgnorePackages) {
+        Log.d(TAG, "Ignored marketing red-packet notification: $content")
+        return
       }
-      // 不 return，继续走正常弹窗流程
-    } else if (content.contains("红包") && packageName in redPacketIgnorePackages) {
-      Log.d(TAG, "Ignored marketing red-packet notification: $content")
-      return
-    } else if (content.contains("红包") && parsedAmount == null) {
-      Log.d(TAG, "Red packet notification (amount unknown, non-WeChat), ignored: $content")
-      return
+      if (parseAmountFromText(text) == null) {
+        Log.d(TAG, "Red packet notification (amount unknown), ignored: $content")
+        return
+      }
     }
 
-    // 转账收款通知：保留弹窗，让用户确认金额
-    // 之前直接忽略是假设无障碍服务会兜底，但华为等手机容易杀无障碍
-    if (content.contains("转账") && content.contains("收款")) {
-      Log.d(TAG, "Transfer receive notification, showing overlay for confirmation: $content")
-      // 不 return，继续走正常弹窗流程
-    }
+    val parsedAmount = parseAmountFromText(text)
 
     Log.d(TAG, "Payment notification captured: $content")
 
@@ -127,11 +129,12 @@ class NotificationListener : NotificationListenerService() {
     if (isAppInForeground()) {
       // 前台：交给 JS 层的 ConfirmSheet 弹窗（广播给原生模块转发）
       val broadcast = Intent("com.payrecord.app.NOTIFICATION_RECEIVED").apply {
-        putExtra("packageName", packageName)
+        putExtra("packageName", sourcePackage)
         putExtra("title", title)
         putExtra("text", text)
         putExtra("timestamp", sbn.postTime)
-        // 用动态包名：debug 包有 .dev 后缀，硬编码会导致广播投错包
+        // 广播必须投给本 App 自己的包名（release 为 com.payrecord.app、debug 为 .dev 后缀），
+        // 之前误写成 sourcePackage，导致前台通知永远投给了微信/支付宝，JS 层收不到、弹不出确认面板
         setPackage(packageName)
       }
       sendBroadcast(broadcast)

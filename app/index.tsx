@@ -58,7 +58,6 @@ export default function HomeScreen() {
   const colors = useColors();
 
   const { records, todayExpense, todayIncome, monthExpense, monthIncome, lastMonthExpense, loading, refreshDashboard } = useRecordStore();
-  const { firstLaunch, markLaunched } = useAppStore();
 
   useEffect(() => {
     useAppStore.getState().loadSettings();
@@ -381,7 +380,7 @@ export default function HomeScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>最近流水</Text>
           {records.length === 0 && !loading && (
-            <Text style={styles.emptyText}>暂无记录，点击右下角手动记账或模拟通知</Text>
+            <Text style={styles.emptyText}>暂无记录，点击右下角 + 记一笔，或等支付通知自动记账</Text>
           )}
           <View style={styles.listCard}>
             {records.slice(0, displayCount).map((record) => (

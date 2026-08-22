@@ -5,7 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 
-/** 开机后恢复：重排每日提醒闹钟、拉起保活前台服务 */
+/** 开机后恢复：重排每日提醒闹钟、拉起保活前台服务、启动自愈看门狗 */
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Intent.ACTION_BOOT_COMPLETED) return
@@ -13,5 +13,6 @@ class BootReceiver : BroadcastReceiver() {
         ReminderScheduler.rescheduleIfEnabled(context)
         ReminderScheduler.rescheduleSummaryIfEnabled(context)
         KeepAliveService.ensureRunning(context)
+        Watchdog.schedule(context)
     }
 }

@@ -28,6 +28,9 @@ class KeepAliveService : Service() {
         private const val PREFS = "payrecord_keepalive"
         private const val KEY_ENABLED = "enabled"
 
+        var isRunning = false
+            private set
+
         /** 是否处于后台管控激进的厂商（国产 ROM 普遍激进冻结后台进程） */
         fun isRecommended(): Boolean {
             val m = Build.MANUFACTURER.lowercase()
@@ -37,7 +40,9 @@ class KeepAliveService : Service() {
 
         fun isEnabled(context: Context): Boolean {
             val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            return prefs.getBoolean(KEY_ENABLED, isRecommended())
+            // 默认开启：任何机型都可能被系统冻结后台监听服务（不限于国产 ROM），
+            // 用户可在设置页手动关闭
+            return prefs.getBoolean(KEY_ENABLED, true)
         }
 
         fun setEnabled(context: Context, enabled: Boolean) {
@@ -77,8 +82,29 @@ class KeepAliveService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        showForegroundNotification()
+        isRunning = true
+        try {
+            showForegroundNotification()
+        } catch (e: Exception) {
+            // 任何启动失败都不能让进程崩溃（否则通知监听/无障碍会陪葬）
+            Log.e(TAG, "KeepAliveService start failed", e)
+            isRunning = false
+            stopSelf()
+        }
         return START_STICKY
+    }
+
+    // 用户从最近任务划掉 App / 系统回收任务时，安排看门狗快速自愈
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        Watchdog.schedule(this, Watchdog.QUICK_RECOVERY_MS)
+        super.onTaskRemoved(rootIntent)
+    }
+
+    override fun onDestroy() {
+        isRunning = false
+        // 服务被系统杀掉时，尽快安排下一轮自愈检查
+        Watchdog.schedule(this, Watchdog.QUICK_RECOVERY_MS)
+        super.onDestroy()
     }
 
     private fun showForegroundNotification() {
@@ -99,10 +125,23 @@ class KeepAliveService : Service() {
             .setCategory(Notification.CATEGORY_SERVICE)
             .build()
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
-        } else {
-            startForeground(NOTIFICATION_ID, notification)
+        try {
+            // Android 15 对 dataSync 类型的前台服务有 24 小时内 6 小时的硬限制，
+            // 超限后再次 startForeground 会抛 ForegroundServiceStartNotAllowedException，
+            // 之前未捕获导致整个进程反复崩溃（通知监听/无障碍全部陪葬）。
+            // API 34+ 改用无时间限制的 specialUse 类型（Manifest 已声明 subtype 属性）
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+            } else {
+                startForeground(NOTIFICATION_ID, notification)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "startForeground failed: ${e.message}")
+            // 必须在 startForegroundService 超时窗口内停掉自己，否则系统会以
+            // ForegroundServiceDidNotStopInTimeException 再次崩溃进程
+            stopSelf()
         }
     }
 }

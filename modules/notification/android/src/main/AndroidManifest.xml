@@ -3,6 +3,7 @@
     <uses-permission android:name="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -30,13 +31,20 @@
         </service>
         <service
                 android:name="com.payrecord.app.notification.KeepAliveService"
-                android:foregroundServiceType="dataSync"
-                android:exported="false" />
+                android:foregroundServiceType="dataSync|specialUse"
+                android:exported="false">
+            <property
+                    android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                    android:value="keep_alive_for_notification_listener_and_accessibility_service" />
+        </service>
         <receiver
                 android:name="com.payrecord.app.notification.DailyReminderReceiver"
                 android:exported="false" />
         <receiver
                 android:name="com.payrecord.app.notification.DailySummaryReceiver"
+                android:exported="false" />
+        <receiver
+                android:name="com.payrecord.app.notification.WatchdogReceiver"
                 android:exported="false" />
         <receiver
                 android:name="com.payrecord.app.notification.BootReceiver"

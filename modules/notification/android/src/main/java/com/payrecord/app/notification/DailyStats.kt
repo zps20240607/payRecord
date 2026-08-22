@@ -28,7 +28,13 @@ object DailyStats {
         "expense_other" to "其他", "other" to "其他",
     )
 
-    fun load(context: Context): Summary {
+    /**
+     * 读取统计数据。
+     * @param date 目标日期 "yyyy-MM-dd"，为 null 时按当前时间算。
+     *   汇总闹钟可能被系统推迟到次日凌晨触发，此时必须传闹钟的目标日期，
+     *   否则会把"今天"算成新的一天，金额全错。
+     */
+    fun load(context: Context, date: String? = null): Summary {
         var todayExpense = 0.0
         var todayCount = 0
         var monthExpense = 0.0
@@ -40,15 +46,38 @@ object DailyStats {
             db = openDatabase(dbFile) ?: return Summary(0.0, 0, 0.0, emptyList())
 
             val cal = Calendar.getInstance()
-            cal.apply { set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0) }
-            val todayStart = cal.timeInMillis
-            cal.apply { set(Calendar.HOUR_OF_DAY, 23); set(Calendar.MINUTE, 59); set(Calendar.SECOND, 59) }
-            val todayEnd = cal.timeInMillis
-            cal.apply { set(Calendar.DAY_OF_MONTH, 1); set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0) }
-            val monthStart = cal.timeInMillis
-            cal.add(Calendar.MONTH, 1)
-            cal.add(Calendar.MILLISECOND, -1)
-            val monthEnd = cal.timeInMillis
+            if (date != null) {
+                val parts = date.split("-")
+                if (parts.size == 3) {
+                    try {
+                        cal.set(Calendar.YEAR, parts[0].toInt())
+                        cal.set(Calendar.MONTH, parts[1].toInt() - 1)
+                        cal.set(Calendar.DAY_OF_MONTH, parts[2].toInt())
+                    } catch (_: Exception) {}
+                }
+            }
+
+            // 目标日的 00:00:00.000 ~ 23:59:59.999
+            val dayCal = cal.clone() as Calendar
+            dayCal.set(Calendar.HOUR_OF_DAY, 0)
+            dayCal.set(Calendar.MINUTE, 0)
+            dayCal.set(Calendar.SECOND, 0)
+            dayCal.set(Calendar.MILLISECOND, 0)
+            val todayStart = dayCal.timeInMillis
+            val todayEnd = todayStart + 24 * 60 * 60 * 1000L - 1
+
+            // 目标日所在月
+            val monthCal = cal.clone() as Calendar
+            monthCal.set(Calendar.DAY_OF_MONTH, 1)
+            monthCal.set(Calendar.HOUR_OF_DAY, 0)
+            monthCal.set(Calendar.MINUTE, 0)
+            monthCal.set(Calendar.SECOND, 0)
+            monthCal.set(Calendar.MILLISECOND, 0)
+            val monthStart = monthCal.timeInMillis
+            val monthEndCal = monthCal.clone() as Calendar
+            monthEndCal.add(Calendar.MONTH, 1)
+            monthEndCal.add(Calendar.MILLISECOND, -1)
+            val monthEnd = monthEndCal.timeInMillis
 
             todayExpense = sumExpense(db, todayStart, todayEnd)
             todayCount = countExpense(db, todayStart, todayEnd)

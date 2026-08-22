@@ -87,8 +87,32 @@ object ReminderScheduler {
     }
 
     // --- 晚间支出汇总（默认开启，23:00） ---
-    fun scheduleSummary(context: Context, hour: Int, minute: Int): Boolean =
-        scheduleInternal(context, DailySummaryReceiver::class.java, REQUEST_CODE_SUMMARY, hour, minute, allowInexactFallback = true)
+    fun scheduleSummary(context: Context, hour: Int, minute: Int): Boolean {
+        val ok = scheduleInternal(context, DailySummaryReceiver::class.java, REQUEST_CODE_SUMMARY, hour, minute, allowInexactFallback = true)
+        if (ok) {
+            // 记录本次闹钟对应的目标日期（yyyy-MM-dd）。
+            // 无精确闹钟权限时，23:00 的汇总可能被系统推迟到次日凌晨才触发，
+            // 接收器需要按目标日期统计，否则会算成新一天（几乎为 0）的消费
+            val cal = java.util.Calendar.getInstance().apply {
+                set(java.util.Calendar.HOUR_OF_DAY, hour)
+                set(java.util.Calendar.MINUTE, minute)
+                set(java.util.Calendar.SECOND, 0)
+                set(java.util.Calendar.MILLISECOND, 0)
+                if (timeInMillis <= System.currentTimeMillis()) {
+                    add(java.util.Calendar.DAY_OF_MONTH, 1)
+                }
+            }
+            val date = String.format(
+                java.util.Locale.US, "%04d-%02d-%02d",
+                cal.get(java.util.Calendar.YEAR),
+                cal.get(java.util.Calendar.MONTH) + 1,
+                cal.get(java.util.Calendar.DAY_OF_MONTH)
+            )
+            context.getSharedPreferences(PREFS, 0).edit()
+                .putString("daily_summary_target_date", date).apply()
+        }
+        return ok
+    }
 
     fun cancelSummary(context: Context) = cancelInternal(context, DailySummaryReceiver::class.java, REQUEST_CODE_SUMMARY)
 

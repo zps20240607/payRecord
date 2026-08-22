@@ -12,7 +12,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, useThemedStyles, useColors } from '../../constants/colors';
 import type { AppColors } from '../../constants/colors';
-import { DEFAULT_CATEGORIES, getCategoryById } from '../../constants/categories';
+import { getCategoryById, getCategoriesByType } from '../../constants/categories';
 import { useRecordStore } from '../../stores/useRecordStore';
 import * as db from '../../modules/db';
 import { formatDateTime, formatMoney } from '../../utils/date';
@@ -25,9 +25,6 @@ const STATUS_LABEL: Record<string, string> = {
   refunded: '已退款',
   partial: '部分退款',
 };
-
-const EXPENSE_IDS = ['food', 'transport', 'shopping', 'entertainment', 'housing', 'medical', 'education', 'social', 'expense_other'];
-const INCOME_IDS = ['salary', 'redpacket', 'transfer', 'parttime', 'invest', 'income_other'];
 
 export default function RecordDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -98,9 +95,7 @@ export default function RecordDetailScreen() {
   };
 
   const category = record ? getCategoryById(record.categoryId) : null;
-  const filteredCategories = record
-    ? DEFAULT_CATEGORIES.filter(c => record.type === 'income' ? INCOME_IDS.includes(c.id) : EXPENSE_IDS.includes(c.id))
-    : [];
+  const filteredCategories = record ? getCategoriesByType(record.type) : [];
 
   return (
     <View style={styles.safe}>

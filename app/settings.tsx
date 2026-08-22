@@ -6,7 +6,9 @@ import { useColors, useThemedStyles } from '../constants/colors';
 import { useAppStore, DEFAULT_WHITELIST } from '../stores/useAppStore';
 import { useThemeStore } from '../stores/useThemeStore';
 import type { ThemeMode } from '../stores/useThemeStore';
-import { openNotificationSettings, isNotificationServiceEnabled, canDrawOverlay, openOverlaySettings, isBatteryOptIgnored, openBatteryOptSettings, isAccessibilityEnabled, openAccessibilitySettings, openAutoStartSettings, isAutoStartEnabled, scheduleDailyReminder, cancelDailyReminder, isDailyReminderEnabled, openReminderPermissionSettings, openAlarmPermissionSettings, isKeepAliveEnabled, setKeepAliveEnabled, isKeepAliveRecommended, scheduleDailySummary, cancelDailySummary, isDailySummaryEnabled } from '../modules/notification';
+import { openNotificationSettings, isNotificationServiceEnabled, canDrawOverlay, openOverlaySettings, isBatteryOptIgnored, openBatteryOptSettings, isAccessibilityEnabled, openAccessibilitySettings, openAutoStartSettings, isAutoStartEnabled, scheduleDailyReminder, cancelDailyReminder, isDailyReminderEnabled, openReminderPermissionSettings, openAlarmPermissionSettings, isKeepAliveEnabled, setKeepAliveEnabled, isKeepAliveRecommended, scheduleDailySummary, cancelDailySummary, isDailySummaryEnabled, getWatchdogStatus } from '../modules/notification';
+import type { WatchdogStatus } from '../modules/notification';
+import Constants from 'expo-constants';
 import * as db from '../modules/db';
 import { shareCSV, shareJSON, importJSON } from '../utils/export';
 
@@ -52,6 +54,11 @@ export default function SettingsScreen() {
     },
     rowTitle: { fontSize: 15, color: c.text },
     hintInline: { fontSize: 12, color: c.textSecondary, marginTop: 2 },
+    hideNotifyBtn: {
+      marginTop: 8, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8,
+      backgroundColor: c.primary + '12', alignSelf: 'flex-start',
+    },
+    hideNotifyBtnText: { fontSize: 12, color: c.primary, fontWeight: '500' },
     permBtn: {
       paddingHorizontal: 14, paddingVertical: 8,
       backgroundColor: c.primary, borderRadius: 8,
@@ -84,6 +91,7 @@ export default function SettingsScreen() {
   const [keepAliveRecommended, setKeepAliveRecommended] = useState(false);
   const [recordCount, setRecordCount] = useState(0);
   const [checking, setChecking] = useState(false);
+  const [wd, setWd] = useState<WatchdogStatus | null>(null);
 
   useEffect(() => {
     useAppStore.getState().loadSettings();
@@ -111,6 +119,7 @@ export default function SettingsScreen() {
       setSummaryEnabled(await isDailySummaryEnabled());
       setKeepAliveState(await isKeepAliveEnabled());
       setKeepAliveRecommended(await isKeepAliveRecommended());
+      setWd(await getWatchdogStatus());
     } catch {}
     setChecking(false);
   };
@@ -232,7 +241,7 @@ export default function SettingsScreen() {
             <View style={{ flex: 1 }}>
               <Text style={styles.rowTitle}>♿ 无障碍服务（微信补记）</Text>
               <Text style={styles.hintInline}>{a11yEnabled ? '✅ 已开启' : '❌ 未开启'}</Text>
-              <Text style={styles.hintInline}>用于：微信内发红包、转账没有通知推送，靠无障碍服务识别支付成功页面来补记</Text>
+              <Text style={styles.hintInline}>用于：微信红包/转账金额在通知里不显示，统一由无障碍识别红包/转账页面，返回聊天时补记</Text>
             </View>
             <TouchableOpacity style={styles.permBtn} onPress={openAccessibilitySettings}>
               <Text style={styles.permBtnText}>去设置</Text>
@@ -262,8 +271,8 @@ export default function SettingsScreen() {
               <Text style={styles.guidePath}>设置 → 省电与电池 → 右上角⚙️ → 应用智能省电 → 找到"记花" → 无限制</Text>
             </View>
             <View style={styles.guideRow}>
-              <Text style={styles.guideBrand}>华为/EMUI</Text>
-              <Text style={styles.guidePath}>设置 → 电池 → 应用启动管理 → 找到"记花" → 关闭自动管理 → 允许后台活动 + 允许自启动</Text>
+              <Text style={styles.guideBrand}>华为/鸿蒙 HarmonyOS</Text>
+              <Text style={styles.guidePath}>设置 → 电池 → 应用启动管理 → 找到"记花" → 关闭自动管理 → 勾选「允许自启动 + 允许关联启动 + 允许后台活动」</Text>
             </View>
             <View style={styles.guideRow}>
               <Text style={styles.guideBrand}>OPPO/ColorOS</Text>
@@ -324,7 +333,10 @@ export default function SettingsScreen() {
             <View style={{ flex: 1 }}>
               <Text style={styles.rowTitle}>🛡️ 后台保活{keepAliveRecommended ? '（本机建议开启）' : ''}</Text>
               <Text style={styles.hintInline}>华为/荣耀/OPPO/vivo/小米等国产机型会激进冻结无障碍和通知监听服务，开启后通过前台服务防止被冻结</Text>
-              <Text style={styles.hintInline}>通知栏会有一条最低优先级的静默提示（无声、收在最底部），这是 Android 系统的强制要求</Text>
+              <Text style={styles.hintInline}>通知栏会有一条「记花正在运行」静默提示，这是 Android 系统对前台服务的强制要求，App 无法自行隐藏</Text>
+              <TouchableOpacity style={styles.hideNotifyBtn} onPress={openReminderPermissionSettings}>
+                <Text style={styles.hideNotifyBtnText}>🚫 隐藏「记花正在运行」通知（一键跳转，关掉「后台运行」渠道即可，不影响记账）</Text>
+              </TouchableOpacity>
             </View>
             <Switch
               value={keepAliveEnabled}
@@ -359,6 +371,51 @@ export default function SettingsScreen() {
               <Text style={styles.permBtnText}>去设置</Text>
             </TouchableOpacity>
           </View>
+        </View>
+
+        {/* 自愈诊断 */}
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>🩺 自愈诊断</Text>
+          {wd ? (
+            <>
+              <View style={styles.row}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.rowTitle}>📋 通知监听</Text>
+                  <Text style={styles.hintInline}>授权 {wd.listenerGranted ? '✅' : '❌'} · 运行 {wd.listenerRunning ? '✅' : '❌'}</Text>
+                </View>
+                <TouchableOpacity style={styles.permBtn} onPress={() => { checkPermission(); }}>
+                  <Text style={styles.permBtnText}>刷新</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={styles.row}>
+                <Text style={styles.rowTitle}>♿ 无障碍服务</Text>
+                <Text style={styles.hintInline}>授权 {wd.a11yGranted ? '✅' : '❌'} · 运行 {wd.a11yRunning ? '✅' : '❌'}</Text>
+              </View>
+              <View style={styles.row}>
+                <Text style={styles.rowTitle}>🛡️ 保活前台服务</Text>
+                <Text style={styles.hintInline}>{wd.keepAliveRunning ? '✅ 运行中' : '❌ 未运行'}</Text>
+              </View>
+              <View style={styles.row}>
+                <Text style={styles.rowTitle}>⏰ 看门狗闹钟</Text>
+                <Text style={styles.hintInline}>{wd.watchdogAlarmPending ? '✅ 已武装' : '❌ 未武装'}</Text>
+              </View>
+              <View style={styles.row}>
+                <Text style={styles.rowTitle}>🎯 精确闹钟权限</Text>
+                <Text style={styles.hintInline}>{wd.canExactAlarm ? '✅ 已授权' : '⚠️ 未授权（降级为普通闹钟）'}</Text>
+              </View>
+              <View style={[styles.row, { borderBottomWidth: 0 }]}>
+                <Text style={styles.rowTitle}>🕐 最近自检</Text>
+                <Text style={styles.hintInline}>
+                  {wd.lastTick > 0 ? `${Math.floor((Date.now() - wd.lastTick) / 60000)} 分钟前` : '从未触发'}
+                </Text>
+              </View>
+              <Text style={styles.hintInline}>
+                划掉 App 后若「最近自检」一直停在原地不更新，说明系统阻止了闹钟（需开启🚀自启动权限）；若自检在跑但监听仍不恢复，请把本页截图反馈。
+              </Text>
+            </>
+          ) : (
+            <Text style={styles.hintInline}>{checking ? '检测中...' : '暂不可用'}</Text>
+          )}
         </View>
 
         {/* 白名单 */}
@@ -414,7 +471,7 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.footer}>数据仅存储在本地，保护隐私。</Text>
+        <Text style={styles.footer}>数据仅存储在本地，保护隐私。· v{Constants.expoConfig?.version ?? '1.3.1'}</Text>
       </ScrollView>
     </View>
   );

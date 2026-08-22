@@ -43,3 +43,5 @@ npx expo run:android  # Android 原生构建
 
 - Android 的通知监听、无障碍、悬浮窗等能力需要用户手动授权
 - 签名文件、密钥、环境变量等敏感内容不提交（见 `.gitignore`）
+- 只发布 release 包：debug 与 release 共用同一 `applicationId`（无 `.dev` 后缀），互相覆盖安装
+- 自动记账自愈：原生侧内置 15 分钟看门狗（`Watchdog`），通知监听服务或保活服务被系统回收后会自动重新绑定/拉起，无需反复打开 App

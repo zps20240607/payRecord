@@ -13,7 +13,7 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, useThemedStyles, useColors } from '../constants/colors';
 import type { AppColors } from '../constants/colors';
-import { DEFAULT_CATEGORIES } from '../constants/categories';
+import { DEFAULT_CATEGORIES, getCategoriesByType } from '../constants/categories';
 import { useRecordStore } from '../stores/useRecordStore';
 import type { PayRecord } from '../modules/record/types';
 
@@ -24,11 +24,7 @@ export default function AddRecordScreen() {
   const [type, setType] = useState<'expense' | 'income'>('expense');
   const [categoryId, setCategoryId] = useState(DEFAULT_CATEGORIES[0].id);
 
-  const EXPENSE_IDS = ['food', 'transport', 'shopping', 'entertainment', 'housing', 'medical', 'education', 'social', 'expense_other'];
-  const INCOME_IDS = ['salary', 'redpacket', 'transfer', 'parttime', 'invest', 'income_other'];
-  const filteredCategories = DEFAULT_CATEGORIES.filter(c =>
-    type === 'expense' ? EXPENSE_IDS.includes(c.id) : INCOME_IDS.includes(c.id)
-  );
+  const filteredCategories = getCategoriesByType(type);
 
   const handleTypeChange = (newType: 'expense' | 'income') => {
     setType(newType);

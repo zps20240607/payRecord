@@ -26,6 +26,9 @@ export const DEFAULT_TEMPLATES: ParseTemplate[] = [
     name: '微信支付',
     appId: 'com.tencent.mm',
     patterns: [
+      // 说明：微信「红包/转账」通知已在 NotificationListener 与 handleNotification 两层跳过，
+      // 统一由无障碍服务（红包/转账详情页 → 返回聊天）补记。
+      // 下面的红包/转账规则仅作为兜底解析，正常情况下不会走到。
       // 红包
       { regex: '微信红包.*?([\\d,.]+)(?:元|块钱)', flags: 's', amountGroup: 1, type: 'expense', channelGroup: 0 },
       { regex: '发出红包.*?([\\d,.]+)(?:元|块钱)', flags: 's', amountGroup: 1, type: 'expense', channelGroup: 0 },

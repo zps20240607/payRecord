@@ -1,5 +1,7 @@
 package com.payrecord.app.notification
 
+import android.app.AlarmManager
+import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -58,6 +60,8 @@ class PayRecordNotificationModule : Module() {
         KeepAliveService.ensureRunning(it)
         // 汇总通知默认开启，App 启动时自愈调度（覆盖新装/升级/闹钟丢失场景）
         ReminderScheduler.rescheduleSummaryIfEnabled(it)
+        // 启动进程自愈看门狗：每 15 分钟检查一次监听服务/保活服务是否被系统回收
+        Watchdog.schedule(it)
       }
       promise.resolve(true)
     }
@@ -539,6 +543,45 @@ class PayRecordNotificationModule : Module() {
       val context = appContext.reactContext
       if (context == null) { promise.resolve(false); return@AsyncFunction }
       promise.resolve(ReminderScheduler.isSummaryEnabled(context))
+    }
+
+    // 自愈诊断：把看门狗/监听/无障碍/保活的真实运行状态上报给设置页展示，
+    // 用于定位"划掉 App 后监听不恢复"的设备级问题
+    AsyncFunction("getWatchdogStatus") { promise: Promise ->
+      val context = appContext.reactContext
+      if (context == null) { promise.resolve(emptyMap<String, Any>()); return@AsyncFunction }
+      try {
+        val prefs = context.getSharedPreferences("payrecord_prefs", 0)
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val pendingIntent = PendingIntent.getBroadcast(
+          context, 3001,
+          Intent(context, WatchdogReceiver::class.java),
+          PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
+        )
+        val listenerFlat = android.provider.Settings.Secure.getString(
+          context.contentResolver, "enabled_notification_listeners"
+        ) ?: ""
+        val a11yFlat = android.provider.Settings.Secure.getString(
+          context.contentResolver, "enabled_accessibility_services"
+        ) ?: ""
+        val canExact = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+          alarmManager.canScheduleExactAlarms()
+        } else true
+
+        promise.resolve(mapOf(
+          "lastTick" to prefs.getLong("watchdog_last_tick", 0L),
+          "watchdogAlarmPending" to (pendingIntent != null),
+          "listenerGranted" to listenerFlat.contains(context.packageName),
+          "listenerRunning" to NotificationListener.isRunning,
+          "a11yGranted" to a11yFlat.contains(context.packageName),
+          "a11yRunning" to PayAccessibilityService.isRunning,
+          "keepAliveRunning" to KeepAliveService.isRunning,
+          "canExactAlarm" to canExact
+        ))
+      } catch (e: Exception) {
+        Log.e("PayRecord", "getWatchdogStatus failed", e)
+        promise.resolve(emptyMap<String, Any>())
+      }
     }
 
     AsyncFunction("consumeQuickAddQueue") { promise: Promise ->

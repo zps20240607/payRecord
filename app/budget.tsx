@@ -10,14 +10,12 @@ import {
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Colors, useThemedStyles, useColors } from '../constants/colors';import type { AppColors } from '../constants/colors';
-import { DEFAULT_CATEGORIES, getCategoryById } from '../constants/categories';
-import { useRecordStore } from '../stores/useRecordStore';import * as db from '../modules/db';
+import { useThemedStyles, useColors } from '../constants/colors';
+import type { AppColors } from '../constants/colors';
+import { DEFAULT_CATEGORIES, getCategoryById, INCOME_CATEGORY_IDS } from '../constants/categories';
+import * as db from '../modules/db';
 import type { Budget } from '../modules/record/types';
 import { formatMoney, startOfMonth, endOfMonth } from '../utils/date';
-
-// 收入类分类不需要预算
-const INCOME_CATEGORY_IDS = ['salary', 'redpacket', 'transfer', 'parttime', 'invest', 'income_other'];
 
 export default function BudgetScreen() {
   const router = useRouter();

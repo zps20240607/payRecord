@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import BottomSheet, { BottomSheetBackdrop, BottomSheetView } from '@gorhom/bottom-sheet';
 import type { ParsedNotification, PayRecord } from '../modules/record/types';
-import { DEFAULT_CATEGORIES, getCategoryById } from '../constants/categories';
+import { DEFAULT_CATEGORIES, getCategoriesByType } from '../constants/categories';
 import { useThemedStyles, useColors } from '../constants/colors';
 import type { AppColors } from '../constants/colors';
 import { formatDateTime, formatMoney } from '../utils/date';
@@ -52,12 +52,9 @@ export const ConfirmSheet = React.forwardRef<BottomSheet, ConfirmSheetProps>(
     const [categoryId, setCategoryId] = useState(DEFAULT_CATEGORIES[0].id);
     const [note, setNote] = useState('');
 
-    const EXPENSE_IDS = ['food', 'transport', 'shopping', 'entertainment', 'housing', 'medical', 'education', 'social', 'expense_other'];
-    const INCOME_IDS = ['salary', 'redpacket', 'transfer', 'parttime', 'invest', 'income_other'];
     const filteredCategories = useMemo(() =>
-      DEFAULT_CATEGORIES.filter(c =>
-        (payload?.type === 'income' ? INCOME_IDS : EXPENSE_IDS).includes(c.id)
-      ), [payload?.type]
+      getCategoriesByType(payload?.type === 'income' ? 'income' : 'expense'),
+      [payload?.type]
     );
 
     useEffect(() => {

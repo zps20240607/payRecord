@@ -6,7 +6,7 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemedStyles, useColors } from '../constants/colors';
 import type { AppColors } from '../constants/colors';
-import { DEFAULT_CATEGORIES, getCategoryById } from '../constants/categories';
+import { getCategoryById, getCategoriesByType } from '../constants/categories';
 import type { RecurringRecord } from '../modules/db/recurrings';
 import { getRecurrings, addRecurring, deleteRecurring, toggleRecurring, calcNextTrigger } from '../modules/db/recurrings';
 import { formatDateTime } from '../utils/date';
@@ -21,9 +21,6 @@ const PERIOD_OPTIONS: { label: string; type: RecurringRecord['periodType']; valu
   { label: '每半年', type: 'monthly', value: 6 },
   { label: '每年', type: 'monthly', value: 12 },
 ];
-
-const EXPENSE_IDS = ['food', 'transport', 'shopping', 'entertainment', 'housing', 'medical', 'education', 'social', 'expense_other'];
-const INCOME_IDS = ['salary', 'redpacket', 'transfer', 'parttime', 'invest', 'income_other'];
 
 export default function RecurringScreen() {
   const router = useRouter();
@@ -105,9 +102,7 @@ export default function RecurringScreen() {
     return r.periodValue === 1 ? '每月' : `每${r.periodValue}月`;
   };
 
-  const filteredCategories = DEFAULT_CATEGORIES.filter(c =>
-    formType === 'expense' ? EXPENSE_IDS.includes(c.id) : INCOME_IDS.includes(c.id)
-  );
+  const filteredCategories = getCategoriesByType(formType);
 
   return (
     <View style={styles.safe}>

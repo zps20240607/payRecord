@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, useThemedStyles, useColors } from '../constants/colors';
 import type { AppColors } from '../constants/colors';
-import { DEFAULT_CATEGORIES, getCategoryById } from '../constants/categories';
+import { DEFAULT_CATEGORIES, getCategoriesByType } from '../constants/categories';
 import { RecordItem } from '../components/RecordItem';
 import type { PayRecord } from '../modules/record/types';
 import * as db from '../modules/db';
@@ -50,11 +50,7 @@ export default function SearchScreen() {
 
   const filteredCategories = typeFilter === 'all'
     ? DEFAULT_CATEGORIES
-    : DEFAULT_CATEGORIES.filter(c =>
-        typeFilter === 'expense'
-          ? ['food','transport','shopping','entertainment','housing','medical','education','social','expense_other'].includes(c.id)
-          : ['salary','redpacket','transfer','parttime','invest','income_other'].includes(c.id)
-      );
+    : getCategoriesByType(typeFilter);
 
   const handleSearch = async () => {
     // 金额输入校验：非数字不传给 SQL（parseFloat 得 NaN 会导致查询行为未定义）

@@ -66,6 +66,20 @@ export function handleNotification(payload: NotificationPayload) {
   if (isDuplicate(payload)) return;
 
   const content = `${payload.title} ${payload.text}`;
+
+  // 微信红包/转账通知（含过期退款）：未领取/未确认前金额不可见，统一由无障碍服务在
+  // 「红包/转账详情页 → 返回聊天」时补记，通知层直接跳过，避免重复弹窗
+  const wechatExpiredRefund =
+    content.includes('过期') &&
+    (content.includes('退款') || content.includes('退回') || content.includes('退还'));
+  if (
+    payload.packageName === 'com.tencent.mm' &&
+    (content.includes('红包') || content.includes('转账') || wechatExpiredRefund)
+  ) {
+    console.log('[PayRecord] 微信红包/转账（或过期退款）交给无障碍处理，忽略通知:', content.substring(0, 80));
+    return;
+  }
+
   // 只关心收付款类通知，其余（如 B站推送）直接忽略
   const hitPay = PAYMENT_KEYWORDS.some((k) => content.includes(k));
   const hitIgnore = IGNORE_KEYWORDS.some((k) => content.includes(k));
@@ -334,6 +348,37 @@ export async function isDailySummaryEnabled(): Promise<boolean> {
     return await NativeModule.isDailySummaryEnabled();
   } catch {}
   return false;
+}
+
+// --- 自愈诊断状态（设置页展示，用于定位后台监听恢复问题） ---
+export interface WatchdogStatus {
+  lastTick: number;
+  watchdogAlarmPending: boolean;
+  listenerGranted: boolean;
+  listenerRunning: boolean;
+  a11yGranted: boolean;
+  a11yRunning: boolean;
+  keepAliveRunning: boolean;
+  canExactAlarm: boolean;
+}
+
+export async function getWatchdogStatus(): Promise<WatchdogStatus | null> {
+  if (Platform.OS !== 'android' || !NativeModule) return null;
+  try {
+    const s = await NativeModule.getWatchdogStatus();
+    if (!s || typeof s !== 'object') return null;
+    return {
+      lastTick: s.lastTick ?? 0,
+      watchdogAlarmPending: s.watchdogAlarmPending ?? false,
+      listenerGranted: s.listenerGranted ?? false,
+      listenerRunning: s.listenerRunning ?? false,
+      a11yGranted: s.a11yGranted ?? false,
+      a11yRunning: s.a11yRunning ?? false,
+      keepAliveRunning: s.keepAliveRunning ?? false,
+      canExactAlarm: s.canExactAlarm ?? false,
+    };
+  } catch {}
+  return null;
 }
 
 export async function openReminderPermissionSettings(): Promise<void> {
